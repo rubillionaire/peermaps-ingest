@@ -1,0 +1,11 @@
+[package]
+name = "osm-data"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+georender-pack = "3.0.0"
+hex = "0.4.3"
+osmpbf = "0.3.0"
