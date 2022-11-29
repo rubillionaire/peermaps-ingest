@@ -9,10 +9,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "georender-pack": "^4.1.0",
+    "georender-pack": "^4.2.5",
     "hyperbee": "^1.7.0",
     "hyperdrive": "^10.21.0",
     "length-prefixed-buffers": "^1.1.0",
+    "level": "^8.0.0",
     "peermaps": "^3.1.4",
     "through2": "^2.0.5"
   },

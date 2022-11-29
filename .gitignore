@@ -1,7 +1,7 @@
 node_modules
-*.eyros
-*.georender
-*.hyperbee
-*.hyperdrive
-*.pbf
-*.xml
+data/*
+
+
+# Added by cargo
+
+/target
