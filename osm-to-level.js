@@ -10,8 +10,6 @@ const dbFileName = process.argv[3]
 
 const db = new Level(dbFileName, { valueEncoding: 'json' })
 
-const allItemsKey = (id) => `allItems:${id}`
-
 fs.createReadStream(source)
   .pipe(osm)
   .pipe(through.obj(writeLevel))
@@ -21,7 +19,7 @@ function writeLevel (items, enc, next) {
   items.forEach((item) => {
     puts.push({
       type: 'put',
-      key: allItemsKey(item.id),
+      key: item.id,
       value: item,
     })
   })

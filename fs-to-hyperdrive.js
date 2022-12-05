@@ -1,31 +1,27 @@
-const fs = require('fs')
+const fsp = require('fs/promises')
 const path = require('path')
 const glob = require('glob')
 const Hyperdrive = require('hyperdrive')
 
 const source = process.argv[2]
 const target = process.argv[3]
+const key = process.argv[4]
+  ? Buffer.from(process.argv[4], 'hex')
+  : null
 
 ;(async () => {
   const files = await allFiles(source)
-  const drive = Hyperdrive(target)
+  const drive = new Hyperdrive(target, key)
   await drive.promises.ready()
-  const writers = files.map((file) => {
+  for (const file of files) {
     const absFile = path.join(source, file)
-    return new Promise ((resolve, reject) => {
-      fs.readFile(absFile, (error, contents) => {
-        if (error) return reject(error)
-        drive.writeFile(`/${file}`, contents, (error) => {
-          if (error) return reject(error)
-          resolve()
-        })
-      })
-    })
-  })
-  try {
-    await Promise.all(writers)  
-  } catch (error) {
-    console.log(error)
+    try {
+      const contents = await fsp.readFile(absFile)
+      await drive.promises.writeFile(file, contents)
+    }
+    catch (error) {
+      console.log(error)
+    }
   }
   console.log(`hyper://${drive.key.toString('hex')}`)
 })()

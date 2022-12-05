@@ -2,11 +2,10 @@ const fs = require('fs')
 const through = require('through2')
 const parseOSM = require('osm-pbf-parser')
 const {encode} = require('georender-pack')
-// const lpb = require('length-prefixed-buffers')
  
 const osm = parseOSM()
 const allItems = {}
-const itemsRefsObject = {}
+const deps = {}
 
 let currentType = undefined
 
@@ -15,22 +14,26 @@ const target = process.argv[3]
   ? fs.createWriteStream(process.argv[3])
   : process.stdout
 
-const refsForWay = (item) => {
+const refDeps = (item) => {
   item.refs.forEach(function (ref) {
-    if (!itemsRefsObject[ref]) {
-      itemsRefsObject[ref] = allItems[ref]
+    if (!deps[ref] && allItems[ref] && allItems[ref].type === 'node') {
+      deps[ref] = allItems[ref]
+    }
+    else if (!deps[ref] && allItems[ref] && allItems[ref].type === 'way') {
+      deps[ref] = allItems[ref]
+      refDeps(allItems[ref])
     }
   })
 }
 
-const membersForRelation = (item) => {
+const membersDeps = (item) => {
   item.members.forEach(function (member) {
     if (member.id &&
         member.type === 'way' &&
-        !itemsRefsObject[member.id] &&
+        !deps[member.id] &&
         allItems[member.id]) {
-      itemsRefsObject[member.id] = allItems[member.id]
-      refsForWay(allItems[member.id])
+      deps[member.id] = allItems[member.id]
+      refDeps(allItems[member.id])
     }
   })
 }
@@ -42,16 +45,15 @@ fs.createReadStream(source)
 
 function accumulate (items, enc, next) {
   items.forEach(async function (item) {
+    allItems[item.id] = item
     if (item.type === 'node') {
-      allItems[item.id] = item
+      // continue
     }
     else if (item.type === 'way') {
-      allItems[item.id] = item
-      refsForWay(item)
+      refDeps(item)
     }
     else if (item.type === 'relation') {
-      allItems[item.id] = item
-      membersForRelation(item)
+      membersDeps(item)
     }
   })
   next()
@@ -60,10 +62,12 @@ function accumulate (items, enc, next) {
 function pack (next) {
   Object.values(allItems)
     .map((item) => {
-      this.push(
-        (encode(item, itemsRefsObject)).toString('base64') + '\n'
-        // lpb.from(encode(item, itemsRefsObject))
-      )
+      const encoded = encode(item, deps)
+      if (!encoded) {
+        console.log('could-not-encode')
+        console.log(item)
+      }
+      this.push(encoded.toString('base64') + '\n')
     })
   next()
 }
