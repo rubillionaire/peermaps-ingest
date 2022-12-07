@@ -35,48 +35,35 @@ ri-clean:
 ri-get: rhode-island-index.hyperbee
 	node osm-hyperbee-index-get-id.js rhode-island-index.hyperbee 972085471
 
-# pr things
+# all of Puerto Rico
 
 data/pr.osm.pbf:
 	curl https://download.geofabrik.de/north-america/us/puerto-rico-latest.osm.pbf -o data/pr.osm.pbf
 
 data/pr.level: data/pr.osm.pbf
-	node osm-to-level data/pr.osm.pbf data/pr.level
-
-# data/pr.georender: data/pr.osm.pbf
-# 	NODE_OPTIONS=--max_old_space_size=8192 node osm-to-georender.js data/pr.osm.pbf data/pr.georender
+	./bin/ingest.js osm2level data/pr.osm.pbf -o data/pr.level
 
 data/pr.georender: data/pr.level
-	node level-to-georender.js data/pr.level data/pr.georender
-
-# data/pr.georender-rs: data/pr.osm.pbf
-# 	RUST_BACKTRACE=1 cargo run data/pr.osm.pbf > data/pr.georender-rs # hex encoded values come out of this
+	./bin/ingest.js level2georender data/pr.level -o data/pr.georender -f base64
 
 data/pr.eyros: data/pr.georender
 	cat data/pr.georender | npx georender-eyros --datadir data/pr.eyros --format base64
 
-# data/pr.eyros-rs: data/pr.georender-rs
-# 	cat data/pr.georender-rs | npx georender-eyros --datadir data/pr.eyros-rs --format hex
-
 data/pr.eyros.hyperdrive: data/pr.eyros
-	node fs-to-hyperdrive.js data/pr.eyros data/pr.eyros.hyperdrive
-
-# data/pr.eyros-rs.hyperdrive: data/pr.eyros-rs
-# 	node fs-to-hyperdrive.js data/pr.eyros-rs data/pr.eyros-rs.hyperdrive
+	./bin/ingest.js eyros2hyperdrve data/pr.eyros -o data/pr.eyros.hyperdrive
 
 pr-server: data/pr.eyros.hyperdrive
-	npx peermaps http hyper://49feb44d2d957b80acc967f07a7a7b3ab44c911e6d730548af91ed97c65677cc --port 8084 --datadir data/pr.eyros.hyperdrive
-
-# pr-server-rs: data/pr.eyros-rs.hyperdrive
-# 	npx peermaps http hyper://6705b5654922833faea8860faf800712100b7b6538cee7ed9f90a0059d8f0bf3 --port 8081 --datadir data/pr.eyros-rs.hyperdrive
+	npx peermaps http hyper://88a09e05db1c3ff827ddf44351b3b84bf0969275888287aed5f9d9c08f595484 --port 8086 --datadir data/pr.eyros.hyperdrive
 
 pr-clean:
 	rm data/pr.georender
 	rm -rf data/pr.eyros
 	rm -rf data/pr.eyros.hyperdrive
 
+# Puerto Rico coastline relation (item.id === 7117066)
+
 data/pr.georender-7117066: data/pr.level
-	node level-deps-georender.js data/pr.level 7117066 data/pr.georender-7117066
+	./bin/ingest.js level2georender data/pr.level -o data/pr.georender-7117066 --id 7117066
 
 decode-georender-7117066: data/pr.georender-7117066
 	node georender-decode.js data/pr.georender-7117066
@@ -85,14 +72,13 @@ data/pr.eyros-7117066: data/pr.georender-7117066
 	cat data/pr.georender-7117066 | npx georender-eyros --datadir data/pr.eyros-7117066 --format base64
 
 data/pr.eyros.hyperdrive-7117066: data/pr.eyros-7117066
-# 	npx hyperdrive-cmd import data/pr.eyros-7117066 -o data/pr.eyros.hyperdrive-7117066
-	node fs-to-hyperdrive.js data/pr.eyros-7117066 data/pr.eyros.hyperdrive-7117066
+	./bin/ingest.js eyros2hyperdrve data/pr.eyros-7117066 -o data/pr.eyros.hyperdrive-7117066
 
 pr-hyper-addr-7117066: data/pr.eyros.hyperdrive-7117066
 	npx hyperdrive-cmd addr -o data/pr.eyros.hyperdrive-7117066
 
 pr-server-7117066: data/pr.eyros.hyperdrive-7117066
-	npx peermaps http hyper://8f87f38f03b46485d88f742bc7a6a2a7d5260994d579116c0d3935370f279660 --port 8081 --datadir data/pr.eyros.hyperdrive-7117066
+	npx peermaps http hyper://f8eac9e57f5eb37e4c1a44977c6282d3183681e6df2f6bf438ec7893f9917af6 --port 8092 --datadir data/pr.eyros.hyperdrive-7117066
 
 pr-hyper-share-7117066: data/pr.eyros.hyperdrive-7117066
 	npx hyperdrive-cmd share -o data/pr.eyros.hyperdrive-7117066

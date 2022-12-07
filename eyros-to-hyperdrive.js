@@ -3,28 +3,26 @@ const path = require('path')
 const glob = require('glob')
 const Hyperdrive = require('hyperdrive')
 
-const source = process.argv[2]
-const target = process.argv[3]
-const key = process.argv[4]
-  ? Buffer.from(process.argv[4], 'hex')
-  : null
-
-;(async () => {
-  const files = await allFiles(source)
-  const drive = new Hyperdrive(target, key)
+// { eyrosDir : string, hyperdriveDir : string, key : Buffer|null, debug : boolean } => { drive : Hyperdrive }
+// read all of the files off the of the file system and import
+// them into a hyperdrive. 
+module.exports = async function eyrosToHyperdrive ({ eyrosDir, hyperdriveDir, key=null, debug=false }) {
+  const files = await allFiles(eyrosDir)
+  const drive = new Hyperdrive(hyperdriveDir, key)
   await drive.promises.ready()
   for (const file of files) {
-    const absFile = path.join(source, file)
+    const absFile = path.join(eyrosDir, file)
     try {
       const contents = await fsp.readFile(absFile)
       await drive.promises.writeFile(file, contents)
     }
     catch (error) {
-      console.log(error)
+      if (debug) console.log(error)
     }
   }
-  console.log(`hyper://${drive.key.toString('hex')}`)
-})()
+  return { drive }
+  
+}
 
 function allFiles (dir) {
   const options = {

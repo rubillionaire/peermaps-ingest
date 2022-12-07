@@ -1,64 +1,63 @@
 const fs = require('fs')
-const {Level} = require('level')
-const through = require('through2')
 const {encode} = require('georender-pack')
 const varint = require('varint')
 
+// read notes below about the checks that are made on incoming data
 const enforceCheck = true
 
-const dbFileName = process.argv[2]
-const writeFile = process.argv[3]
-  ? fs.createWriteStream(process.argv[3])
-  : process.stdout
+// {
+//   leveldb : level,
+//   georender : string | WriteStream,
+//   format : 'base64'|'hex',
+//   debug : boolean,
+//   id: Number|[Number]|undefined
+// } => undefined
+// Write the contents of the OSM levelleveldb into a georender
+// encoded new line delimited file
+module.exports = async function levelToGeorender ({
+  leveldb,
+  georender,
+  format='base64',
+  debug=false,
+  id,
+}) {
+  const target = typeof georender === 'string'
+    ? fs.createWriteStream(georender)
+    : georender && typeof georender.write === 'function' && typeof georender.end === 'function'
+      ? georender // has write & end, we can use it to write data
+      : process.stdout
 
-const db = new Level(dbFileName, { valueEncoding: 'json' })
+   const itemsIteratorForIds = async (idArray) => {
+     const items = await leveldb.getMany(idArray)
+     return () => items[Symbol.iterator]()
+   }
 
-const getDep = (id) => {
-  return new Promise((resolve, reject) => {
-    db.get(id, (error, value) => {
-      if (error) {
-        console.log('get-id:error:', id)
-        return resolve()
-      }
-      resolve(value)
-    })
-  })
-}
+  const items = Array.isArray(id)
+    ? await itemsIteratorForIds(id)
+    : typeof id === 'number'
+      ? await itemsIteratorForIds([id])
+      : () => leveldb.values()
 
-const getRefs = async (item, deps) => {
-  if (!Array.isArray(item.refs) || item.refs.length === 0) return Promise.resolve()
-  const getters = item.refs.map((refId) => {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const ref = await getDep(refId)
-        if (!ref) return resolve()
-        if (ref.type === 'node') deps[refId] = ref
-        if (ref.type === 'way') {
-          deps[refId] = ref
-          await getRefs(ref, deps)
+  const getDep = (id) => {
+    return new Promise((resolve, reject) => {
+      leveldb.get(id, (error, value) => {
+        if (error) {
+          if (debug) console.log('get-id:error:', id)
+          return resolve()
         }
-        resolve()  
-      }
-      catch (error) {
-        reject(error)
-      }
+        resolve(value)
+      })
     })
-  })
-  await Promise.all(getters)
-}
+  }
 
-const getMembers = async (item, deps) => {
-  const getters = item.members
-    .filter((member) => {
-      return member && member.id
-    })
-    .map((member) => {
+  const getRefs = async (item, deps) => {
+    if (!Array.isArray(item.refs) || item.refs.length === 0) return Promise.resolve()
+    const getters = item.refs.map((refId) => {
       return new Promise(async (resolve, reject) => {
         try {
-          const way = await getDep(member.id)
-          if (!way) return resolve()
-          deps[member.id] = way
-          await getRefs(way, deps)
+          const ref = await getDep(refId)
+          if (!ref) return resolve()
+          if (ref.type === 'node') deps[refId] = ref
           resolve()  
         }
         catch (error) {
@@ -66,12 +65,33 @@ const getMembers = async (item, deps) => {
         }
       })
     })
-  await Promise.all(getters)
-}
+    return await Promise.all(getters)
+  }
 
-;(async () => {
+  const getMembers = async (item, deps) => {
+    const getters = item.members
+      .filter((member) => {
+        return member && member.id
+      })
+      .map((member) => {
+        return new Promise(async (resolve, reject) => {
+          try {
+            const way = await getDep(member.id)
+            if (!way) return resolve()
+            deps[member.id] = way
+            await getRefs(way, deps)
+            resolve()  
+          }
+          catch (error) {
+            reject(error)
+          }
+        })
+      })
+    return await Promise.all(getters)
+  }
+
   try {
-    for await (const item of db.values()) {
+    for await (const item of items()) {
       const deps = {}
       if (item.type === 'node') {
         // no deps
@@ -83,71 +103,76 @@ const getMembers = async (item, deps) => {
         await getMembers(item, deps)
       }
       const encodedItem = encode(item, deps)
+      if (!encodedItem) {
+        if (debug) console.log('no-encoded-item', item.id, item.type)
+        continue
+      }
       if (enforceCheck) {
         const pnt = getPoint(encodedItem)
         if (pnt === null) {
-          console.log('null-point', item.id, item.type)
+          if (debug) console.log('null-point', item.id, item.type)
           continue
         }
         const valid = validPoint(pnt)
-        // at this junction we could just put the pnt straight into
-        // the eyros db? but we do this to break it down. 
-        // this could be modified to be a stream that then writes
-        // to a file, or writes directly to the eyros db
         if (!valid) {
-          console.log('nan-point', item.id, item.type)
+          if (debug) console.log('nan-point', item.id, item.type)
           continue
         }
       }
-      writeFile.write(encodedItem.toString('base64') + '\n')
+      target.write(encodedItem.toString(format) + '\n')
     }  
-    if (typeof writeFile.end === 'function') writeFile.end()
+    target.end()
   }
   catch (error) {
-    console.log(error)
+    throw (error)
   }
-})()
 
-function getPoint(buf) {
-  var ft = buf[0]
-  if (ft !== 1 && ft !== 1 && ft !== 2 && ft !== 3 && ft !== 4) return null
-  var offset = 1
-  var t = varint.decode(buf, offset)
-  offset += varint.decode.bytes
-  var id = varint.decode(buf, offset)
-  offset += varint.decode.bytes
-  if (ft === 0x01) {
-    var lon = buf.readFloatLE(offset)
-    offset += 4
-    var lat = buf.readFloatLE(offset)
-    offset += 4
-    return [lon,lat]
-  } else  if (ft === 0x02 || ft === 0x03 || ft === 0x04) {
-    var pcount = varint.decode(buf, offset)
+  // plucked from georender-eyros, should better understand
+  // why we might get a null or nan point as described above
+  // and if we should filter from them in georender-eyros, or
+  // prevent them from occuring upstream
+  function getPoint(buf) {
+    var ft = buf[0]
+    if (ft !== 1 && ft !== 1 && ft !== 2 && ft !== 3 && ft !== 4) return null
+    var offset = 1
+    var t = varint.decode(buf, offset)
     offset += varint.decode.bytes
-    if (pcount === 0) return null
-    var point = [[Infinity,-Infinity],[Infinity,-Infinity]]
-    for (var i = 0; i < pcount; i++) {
+    var id = varint.decode(buf, offset)
+    offset += varint.decode.bytes
+    if (ft === 0x01) {
       var lon = buf.readFloatLE(offset)
       offset += 4
       var lat = buf.readFloatLE(offset)
       offset += 4
-      point[0][0] = Math.min(point[0][0], lon)
-      point[0][1] = Math.max(point[0][1], lon)
-      point[1][0] = Math.min(point[1][0], lat)
-      point[1][1] = Math.max(point[1][1], lat)
+      return [lon,lat]
+    } else  if (ft === 0x02 || ft === 0x03 || ft === 0x04) {
+      var pcount = varint.decode(buf, offset)
+      offset += varint.decode.bytes
+      if (pcount === 0) return null
+      var point = [[Infinity,-Infinity],[Infinity,-Infinity]]
+      for (var i = 0; i < pcount; i++) {
+        var lon = buf.readFloatLE(offset)
+        offset += 4
+        var lat = buf.readFloatLE(offset)
+        offset += 4
+        point[0][0] = Math.min(point[0][0], lon)
+        point[0][1] = Math.max(point[0][1], lon)
+        point[1][0] = Math.min(point[1][0], lat)
+        point[1][1] = Math.max(point[1][1], lat)
+      }
+      if (pcount === 1) return point[0]
+      return point
     }
-    if (pcount === 1) return point[0]
-    return point
+    return null
   }
-  return null
-}
 
-function isNumber (v) {
-  return typeof v === 'number' && !isNaN(v)
-}
+  function isNumber (v) {
+    return typeof v === 'number' && !isNaN(v)
+  }
 
-function validPoint (pnt) {
-  if (!Array.isArray(pnt)) return false
-  return pnt.flat().find(p => !isNumber(p)) === undefined
+  function validPoint (pnt) {
+    if (!Array.isArray(pnt)) return false
+    return pnt.flat().find(p => !isNumber(p)) === undefined
+  }
+
 }

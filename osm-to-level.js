@@ -1,27 +1,36 @@
 const fs = require('fs')
+const pump = require('pump')
 const through = require('through2')
 const parseOSM = require('osm-pbf-parser')
-const {Level} = require('level')
 
-const osm = parseOSM()
+// { osmFilePath : string, leveldb : level } => undefined
+// write OSM items in the input PBF file into a leveldb so
+// we can seek for dependencies as we need to assemble our
+// georender files.
+module.exports = function osmToLevel ({ osmFilePath, leveldb }) {
+  
 
-const source = process.argv[2]
-const dbFileName = process.argv[3]
-
-const db = new Level(dbFileName, { valueEncoding: 'json' })
-
-fs.createReadStream(source)
-  .pipe(osm)
-  .pipe(through.obj(writeLevel))
-
-function writeLevel (items, enc, next) {
-  const puts = []
-  items.forEach((item) => {
-    puts.push({
-      type: 'put',
-      key: item.id,
-      value: item,
-    })
+  return new Promise((resolve, reject) => {
+    pump(
+      fs.createReadStream(osmFilePath),
+      parseOSM(),
+      through.obj(writeLevel),
+      function (error) {
+        if (error) return reject(error)
+        else resolve()
+      }
+    )
   })
-  db.batch(puts, next)
+
+  function writeLevel (items, enc, next) {
+    const puts = []
+    items.forEach((item) => {
+      puts.push({
+        type: 'put',
+        key: item.id,
+        value: item,
+      })
+    })
+    leveldb.batch(puts, next)
+  }
 }
