@@ -24,7 +24,7 @@ module.exports = async function levelToGeorender ({
   id,
 }) {
   const createWriteStream = (filePath) => {
-    fs.mkdirSync(path.dirname(filePath))
+    fs.mkdirSync(path.dirname(filePath), { recursive: true })
     return fs.createWriteStream(filePath)
   }
   
