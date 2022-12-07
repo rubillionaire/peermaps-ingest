@@ -23,6 +23,6 @@
     "varint": "^5.0.2"
   },
   "bin": {
-    "peermaps-ingest": "bin/ingest"
+    "peermaps-ingest": "bin/ingest.js"
   }
 }
