@@ -2,6 +2,7 @@ const fs = require('fs')
 const pump = require('pump')
 const through = require('through2')
 const parseOSM = require('osm-pbf-parser')
+const osmItemKey = require('./level-osm-item-key')
 
 // { osmFilePath : string, leveldb : level } => undefined
 // write OSM items in the input PBF file into a leveldb so
@@ -9,7 +10,6 @@ const parseOSM = require('osm-pbf-parser')
 // georender files.
 module.exports = function osmToLevel ({ osmFilePath, leveldb }) {
   
-
   return new Promise((resolve, reject) => {
     pump(
       fs.createReadStream(osmFilePath),
@@ -27,7 +27,7 @@ module.exports = function osmToLevel ({ osmFilePath, leveldb }) {
     items.forEach((item) => {
       puts.push({
         type: 'put',
-        key: item.id,
+        key: osmItemKey(item),
         value: item,
       })
     })

@@ -1,6 +1,8 @@
 const fs = require('fs')
+const path = require('path')
 const {encode} = require('georender-pack')
 const varint = require('varint')
+const osmItemKey = require('./level-osm-item-key')
 
 // read notes below about the checks that are made on incoming data
 const enforceCheck = true
@@ -10,7 +12,7 @@ const enforceCheck = true
 //   georender : string | WriteStream,
 //   format : 'base64'|'hex',
 //   debug : boolean,
-//   id: Number|[Number]|undefined
+//   id: string|[string]|undefined
 // } => undefined
 // Write the contents of the OSM levelleveldb into a georender
 // encoded new line delimited file
@@ -21,8 +23,13 @@ module.exports = async function levelToGeorender ({
   debug=false,
   id,
 }) {
+  const createWriteStream = (filePath) => {
+    fs.mkdirSync(path.dirname(filePath))
+    return fs.createWriteStream(filePath)
+  }
+  
   const target = typeof georender === 'string'
-    ? fs.createWriteStream(georender)
+    ? createWriteStream(georender)
     : georender && typeof georender.write === 'function' && typeof georender.end === 'function'
       ? georender // has write & end, we can use it to write data
       : process.stdout
@@ -38,11 +45,12 @@ module.exports = async function levelToGeorender ({
       ? await itemsIteratorForIds([id])
       : () => leveldb.values()
 
-  const getDep = (id) => {
+  const getDep = (item) => {
+    const key = osmItemKey(item)
     return new Promise((resolve, reject) => {
-      leveldb.get(id, (error, value) => {
+      leveldb.get(key, (error, value) => {
         if (error) {
-          if (debug) console.log('get-id:error:', id)
+          if (debug) console.log('get-id:error:', key)
           return resolve()
         }
         resolve(value)
@@ -55,9 +63,10 @@ module.exports = async function levelToGeorender ({
     const getters = item.refs.map((refId) => {
       return new Promise(async (resolve, reject) => {
         try {
-          const ref = await getDep(refId)
-          if (!ref) return resolve()
-          if (ref.type === 'node') deps[refId] = ref
+          const refItem = await getDep({ type: 'node',  id: refId })
+          if (refItem) {
+            deps[refId] = refItem  
+          }
           resolve()  
         }
         catch (error) {
@@ -71,15 +80,17 @@ module.exports = async function levelToGeorender ({
   const getMembers = async (item, deps) => {
     const getters = item.members
       .filter((member) => {
-        return member && member.id
+        return member && member.id && member.type === 'way' &&
+          (member.role === 'inner' || member.role === 'outer')
       })
       .map((member) => {
         return new Promise(async (resolve, reject) => {
           try {
-            const way = await getDep(member.id)
-            if (!way) return resolve()
-            deps[member.id] = way
-            await getRefs(way, deps)
+            const way = await getDep(member)
+            if (way) {
+              deps[member.id] = way
+              await getRefs(way, deps)  
+            }
             resolve()  
           }
           catch (error) {

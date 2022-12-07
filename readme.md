@@ -24,5 +24,5 @@ $ peermaps-ingest eyros2hyperdrve data/eyros -o data/hyperdrive
 To create a hyperdrive of a subset of OSM features, pass in the IDs that you want to have a hyperdrive of into `peermaps-ingest level2georender`
 
 ```bash
-$ peermaps-ingest level2georender data/level -o data/georender --id 7117066
+$ peermaps-ingest level2georender data/level -o data/georender --id relation:7117066,relation:253642,relation:2747855
 ```

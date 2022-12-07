@@ -119,10 +119,8 @@ function getKey () {
 
 function getId () {
   return typeof argv.id === 'string'
-    ? argv.id.split(',').map(parseFloat)
-    : typeof argv.id === 'number'
-      ? [argv.id]
-      : null
+    ? argv.id.split(',').map((s) => s.trim())
+    : null
 }
 
 function ingestUsage() {
