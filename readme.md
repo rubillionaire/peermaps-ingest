@@ -1,6 +1,6 @@
 # peermaps-ingest
 
-This is a WIP
+Status: This has been used to successfully import an OSM PBF of Puerto Rico.
 
 Module and CLI to read [OSM PBF](https://wiki.openstreetmap.org/wiki/PBF_Format) data, store it in an intermediary [leveldb](https://github.com/Level/level/), convert it to new line delimited [georender](https://github.com/peermaps/docs/blob/master/georender.md) file, put it into an [eyros](https://github.com/peermaps/eyros) database, and then host that as a [hyperdrive](https://github.com/hypercore-protocol/hyperdrive).
 
