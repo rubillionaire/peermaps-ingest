@@ -41,7 +41,7 @@ module.exports = async function levelToGeorender ({
 
   const items = Array.isArray(id)
     ? await itemsIteratorForIds(id)
-    : typeof id === 'number'
+    : typeof id === 'string'
       ? await itemsIteratorForIds([id])
       : () => leveldb.values()
 
@@ -53,6 +53,7 @@ module.exports = async function levelToGeorender ({
           if (debug) console.log('get-id:error:', key)
           return resolve()
         }
+        if (!value && debug) console.log('get-dep:not-found:', key)
         resolve(value)
       })
     })
