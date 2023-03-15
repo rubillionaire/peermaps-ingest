@@ -1,38 +1,19 @@
-const fsp = require('fs/promises')
-const path = require('path')
-const glob = require('glob')
+const Corestore = require('corestore')
 const Hyperdrive = require('hyperdrive')
+const Localdrive = require('localdrive')
+const MirrorDrive = require('mirror-drive')
 
 // { eyrosDir : string, hyperdriveDir : string, key : Buffer|null, debug : boolean } => { drive : Hyperdrive }
 // read all of the files off the of the file system and import
 // them into a hyperdrive. 
 module.exports = async function eyrosToHyperdrive ({ eyrosDir, hyperdriveDir, key=null, debug=false }) {
-  const files = await allFiles(eyrosDir)
-  const drive = new Hyperdrive(hyperdriveDir, key)
-  await drive.promises.ready()
-  for (const file of files) {
-    const absFile = path.join(eyrosDir, file)
-    try {
-      const contents = await fsp.readFile(absFile)
-      await drive.promises.writeFile(file, contents)
-    }
-    catch (error) {
-      if (debug) console.log(error)
-    }
-  }
-  return { drive }
-  
-}
-
-function allFiles (dir) {
-  const options = {
-    cwd: dir,
-    nodir: true,
-  }
-  return new Promise((resolve, reject) => {
-    glob('**/*', options, (error, files) => {
-      if (error) return reject(error)
-      resolve(files)
-    })
-  })  
+  const src = new Localdrive(eyrosDir)
+  // const files = await allFiles(eyrosDir)
+  const store = new Corestore(hyperdriveDir)
+  await store.ready()
+  const dst = new Hyperdrive(store, key)
+  await dst.ready()
+  const mirror = new MirrorDrive(src, dst)
+  await mirror.done()
+  return { drive: dst }
 }
