@@ -8,7 +8,6 @@ const MirrorDrive = require('mirror-drive')
 // them into a hyperdrive. 
 module.exports = async function eyrosToHyperdrive ({ eyrosDir, hyperdriveDir, key=null, debug=false }) {
   const src = new Localdrive(eyrosDir)
-  // const files = await allFiles(eyrosDir)
   const store = new Corestore(hyperdriveDir)
   await store.ready()
   const dst = new Hyperdrive(store, key)
